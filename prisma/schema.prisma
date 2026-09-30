@@ -1,0 +1,106 @@
+// ClipMitra AI — Database Schema
+// Run `npm run db:push` after setting DATABASE_URL in .env
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth / Users ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  passwordHash  String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  projects      Project[]
+}
+
+// ---------- Projects (one per uploaded film/video) ----------
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  language    String    @default("Hindi") // Hindi | Haryanvi | Hinglish | English
+  contentType String[]  @default([])       // Comedy, Emotional, Dialogue, etc.
+  status      ProjectStatus @default(UPLOADING)
+
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  video       Video?
+  clips       Clip[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum ProjectStatus {
+  UPLOADING
+  ANALYZING_AUDIO
+  TRANSCRIBING
+  FINDING_SCENES
+  FINDING_MOMENTS
+  GENERATING_CLIPS
+  COMPLETED
+  FAILED
+}
+
+// ---------- Original uploaded video ----------
+
+model Video {
+  id            String    @id @default(cuid())
+  projectId     String    @unique
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  originalUrl   String    // object storage URL
+  durationSec   Int?
+  fileSizeBytes BigInt?
+  transcript    String?   @db.Text // raw speech-to-text output
+  createdAt     DateTime  @default(now())
+}
+
+// ---------- AI-detected clips ----------
+
+model Clip {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  startSec      Float
+  endSec        Float
+  category      String    // Comedy | Emotional | Dialogue | Nostalgia | Entry ...
+  viralScore    Int       // 0-100
+  scoreReason   String?   @db.Text
+
+  hook          String?
+  caption       Caption[]
+  hashtags      String[]  @default([])
+
+  reelUrl       String?   // 9:16 export
+  squareUrl     String?   // 1:1 export
+  wideUrl       String?   // 16:9 export
+
+  createdAt     DateTime  @default(now())
+}
+
+// ---------- Captions per clip (multiple styles) ----------
+
+model Caption {
+  id        String   @id @default(cuid())
+  clipId    String
+  clip      Clip     @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  style     String   // short | viral | desi | youtube_shorts
+  text      String   @db.Text
+
+  createdAt DateTime @default(now())
+}
